@@ -1,4 +1,4 @@
-package com.shimodatebooth.screens
+package com.shimodatebooth.screens.search_video
 
 import android.Manifest
 import android.content.Context
@@ -23,6 +23,7 @@ import androidx.compose.material3.Surface
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -38,6 +39,7 @@ import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import androidx.compose.ui.window.Popup
 import androidx.compose.ui.window.PopupProperties
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
 import com.google.accompanist.permissions.ExperimentalPermissionsApi
 import com.google.accompanist.permissions.PermissionRequired
@@ -45,9 +47,9 @@ import com.google.accompanist.permissions.rememberPermissionState
 import com.shimodatebooth.R
 import com.shimodatebooth.models.VideoModel
 import com.shimodatebooth.navigation.AppScreens
-import com.shimodatebooth.services.SpeechRecognitionServices
 import com.shimodatebooth.utils.CommonFunctions
 import com.shimodatebooth.data.VideoUrls
+import com.shimodatebooth.screens.face_tracking.FaceTrackingViewModel
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -58,7 +60,10 @@ import java.nio.charset.StandardCharsets
 
 @OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun SearchVideoScreen(navController: NavController) {
+fun SearchVideoScreen(
+    navController: NavController,
+    vm: SearchVideoViewModel = viewModel()
+) {
     val context = LocalContext.current;
 
     val recordAudioPermissionState =
@@ -76,10 +81,10 @@ fun SearchVideoScreen(navController: NavController) {
         }
     ) {
 
-        var isSearching by remember { mutableStateOf(false) }
-        var searchingText by remember { mutableStateOf("") }
+        val isSearching by vm.searching.collectAsState()
+        val searchingText by vm.searchingText.collectAsState()
 
-        val recognizer = SpeechRecognizer.createSpeechRecognizer(LocalContext.current)
+        val recognizer = SpeechRecognizer.createSpeechRecognizer(context)
 
         val backgroundImage = painterResource(id = R.drawable.search_videos_background)
 
@@ -115,10 +120,7 @@ fun SearchVideoScreen(navController: NavController) {
                         .padding(horizontal = 16.dp)
                         .padding(top = 28.dp),
                     onClick = {
-                        onSearchTap(navController, recognizer, context) { searching, text ->
-                            isSearching = searching
-                            searchingText = text
-                        }
+                        vm.onSearchTap(navController, recognizer, context)
                     }
                 ) {
                     Text(
@@ -178,67 +180,6 @@ fun VideoItem(
     }
     Spacer(modifier = Modifier.height(8.dp))
 }
-
-/// handle when start speech recognition
-fun onSearchTap(
-    navController: NavController,
-    recognizer: SpeechRecognizer,
-    context: Context,
-    isSearching: (Boolean, String) -> Unit,
-) {
-    SpeechRecognitionServices.startListening(
-        recognizer,
-        onResult = { result ->
-            CoroutineScope(Dispatchers.Main).launch {
-                onSpeechRecogitionResult(result, context, navController) {
-                    isSearching(it, result)
-                }
-            }
-        },
-        onError = { error ->
-            Toast.makeText(context, "Error occurred: $error", Toast.LENGTH_SHORT).show()
-        },
-    )
-}
-
-/// handle search video when speech recogition result
-suspend fun onSpeechRecogitionResult(
-    result: String,
-    context: Context,
-    navController: NavController,
-    isSearching: (Boolean) -> Unit,
-) {
-
-    var url = ""
-
-    // hiển thị popup đang tìm kiếm
-    isSearching(true)
-
-    // tìm kiếm keyword từ danh sách video có sẵn
-    for (video in VideoUrls.videos) {
-        val isContains: Boolean = CommonFunctions.hasCommonWord(video.title, result)
-        if (isContains) {
-            url = video.url
-            println(url)
-        }
-    }
-
-    // delay 3 seconds
-    delay(3000)
-
-    // đóng popup
-    isSearching(false)
-
-    if (url.isEmpty()) {
-        Toast.makeText(context, "No match found", Toast.LENGTH_SHORT).show()
-    } else {
-        // encodeUrl để tránh kí tự đặc biệt dẫn đến truyền args sai
-        val encodedUrl = URLEncoder.encode(url, StandardCharsets.UTF_8.toString())
-        navController.navigate("${AppScreens.VideoDetailScreen.route}/${encodedUrl}")
-    }
-    println(result)
-}
-
 
 @Composable
 fun SearchingPopup(text: String) {

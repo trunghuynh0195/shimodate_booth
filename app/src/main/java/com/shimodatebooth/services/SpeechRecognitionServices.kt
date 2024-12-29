@@ -51,7 +51,6 @@ class SpeechRecognitionServices {
                 override fun onEndOfSpeech() {
                     println("End...");
                     // Speech has ended
-
                 }
 
                 override fun onError(error: Int) {
@@ -80,11 +79,10 @@ class SpeechRecognitionServices {
 
                 @SuppressLint("RestrictedApi")
                 override fun onPartialResults(partialResults: Bundle?) {
-                    val matches =
-                        partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
-
-                    // Handle partial results
-                    Log.d(TAG, "onPartialResults: ${matches?.get(0)}")
+                    val matches = partialResults?.getStringArrayList(SpeechRecognizer.RESULTS_RECOGNITION)
+                    if (!matches.isNullOrEmpty()) {
+                        onResult(matches[0]) // Get the first match as the result
+                    }
                 }
 
                 override fun onEvent(eventType: Int, params: Bundle?) {

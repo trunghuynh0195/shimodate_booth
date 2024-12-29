@@ -1,57 +1,82 @@
-package com.shimodatebooth.screens
+package com.shimodatebooth.screens.face_tracking
 
-import android.content.Context
-import androidx.annotation.OptIn
+import android.Manifest
 import androidx.camera.core.CameraSelector
-import androidx.camera.core.ExperimentalGetImage
 import androidx.camera.core.ImageAnalysis
 import androidx.camera.core.ImageProxy
 import androidx.camera.lifecycle.ProcessCameraProvider
 import androidx.camera.view.PreviewView
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
+import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
 import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.runtime.collectAsState
 import androidx.compose.runtime.getValue
-import androidx.compose.runtime.mutableStateOf
-import androidx.compose.runtime.remember
-import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.layout.ContentScale
 import androidx.compose.ui.platform.LocalContext
-import androidx.compose.ui.platform.LocalLifecycleOwner
 import androidx.compose.ui.res.painterResource
 import androidx.compose.ui.viewinterop.AndroidView
 import androidx.core.content.ContextCompat
+import androidx.lifecycle.viewmodel.compose.viewModel
 import androidx.navigation.NavController
-import com.google.mlkit.vision.common.InputImage
-import com.google.mlkit.vision.facemesh.FaceMeshDetection
-import com.google.mlkit.vision.facemesh.FaceMeshDetectorOptions
+import com.google.accompanist.permissions.ExperimentalPermissionsApi
+import com.google.accompanist.permissions.PermissionRequired
+import com.google.accompanist.permissions.rememberPermissionState
 import com.shimodatebooth.R
 import com.shimodatebooth.navigation.AppScreens
+import com.shimodatebooth.screens.search_video.SearchVideoScreen
 import com.shimodatebooth.services.FaceAnalyzer
 
+@OptIn(ExperimentalPermissionsApi::class)
 @Composable
-fun FaceTrackingScreen(navController: NavController) {
+fun FaceTrackingScreen(
+    navController: NavController,
+    vm: FaceTrackingViewModel = viewModel()
+) {
 
-    val context = LocalContext.current
-    val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+    val cameraPermissionState = rememberPermissionState(permission = Manifest.permission.CAMERA)
 
-    // Trạng thái phát hiện khuôn mặt
-    var faceDetected by remember { mutableStateOf(false) }
-
-    // Camera Preview
-    CameraPreview(
-        onImageProxy = { imageProxy ->
-            FaceAnalyzer.analyzeImage(imageProxy, context) { detected ->
-                faceDetected = detected
+    PermissionRequired(
+        permissionState = cameraPermissionState,
+        permissionNotGrantedContent = {
+            LaunchedEffect(Unit) {
+                cameraPermissionState.launchPermissionRequest()
+            }
+        },
+        permissionNotAvailableContent = {
+            Column(
+            ) {
+                Text(text = "Camera Permission Denied.")
             }
         }
-    )
+    ) {
 
-    // Xử lý hiển thị màn hình khi phát hiện khuôn mặt
-    if (faceDetected) SearchVideoScreen(navController) else BackgroundImage()
+        val context = LocalContext.current
+        val lifecycleOwner = androidx.lifecycle.compose.LocalLifecycleOwner.current
+
+        // Trạng thái phát hiện khuôn mặt
+        val faceDetected by vm.faceDetected.collectAsState()
+
+        // Camera Preview
+        CameraPreview(
+            onImageProxy = { imageProxy ->
+                FaceAnalyzer.analyzeImage(imageProxy, context) { detected ->
+                    vm.updateFaceDetected(detected)
+                }
+            }
+        )
+
+        // Xử lý hiển thị màn hình khi phát hiện khuôn mặt
+        LaunchedEffect(faceDetected) {
+            if (!faceDetected) {
+                navController.navigate(AppScreens.SearchVideoScreen.route)
+            }
+        }
+    }
 
 }
 
@@ -89,18 +114,4 @@ fun CameraPreview(onImageProxy: (ImageProxy) -> Unit) {
             }
         }
     )
-}
-
-@Composable
-fun BackgroundImage() {
-    val backgroundImage = painterResource(id = R.drawable.face_analyzer_background)
-
-    Box(modifier = Modifier.fillMaxSize()) {
-        Image(
-            painter = backgroundImage,
-            contentDescription = "Background Image",
-            modifier = Modifier.fillMaxSize(),
-            contentScale = ContentScale.Crop
-        )
-    }
 }
